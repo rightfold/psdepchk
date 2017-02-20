@@ -28,12 +28,7 @@ def find_all_imports(directory):
     return imports
 
 def check(dependencies, directory, suffix):
-    imports = set()
     own_imports = find_all_imports(directory)
-    imports.update(own_imports)
-    for package in os.listdir("bower_components"):
-        src_path = "bower_components/" + package + "/src"
-        imports.update(find_all_imports(src_path))
     for package in os.listdir("bower_components"):
         definitions = set()
         src_path = "bower_components/" + package + "/src"
@@ -45,7 +40,7 @@ def check(dependencies, directory, suffix):
                     if definition is not None:
                         definitions.add(definition)
         if (package in dependencies
-                and not any(d in imports for d in definitions)):
+                and not any(d in own_imports for d in definitions)):
             yield "REDUNDANT", suffix, package
         if (any(d in own_imports for d in definitions)
                 and package not in dependencies):
