@@ -1,0 +1,67 @@
+#!/usr/bin/env python
+from __future__ import print_function
+import json
+import os
+import re
+
+def find_module(file):
+    for line in file:
+        match = re.match(r"^module\s+([A-Za-z\.]+)", line)
+        if match is not None:
+            return match.group(1)
+
+def find_imports(file):
+    imports = set()
+    for line in file:
+        match = re.match(r"^import\s+([A-Za-z\.]+)", line)
+        if match is not None:
+            imports.add(match.group(1))
+    return imports
+
+def find_all_imports(directory):
+    imports = set()
+    for root, directories, files in os.walk(directory):
+        for file in filter(lambda file: file.endswith(".purs"), files):
+            path = root + "/" + file
+            with open(path) as file:
+                imports.update(find_imports(file))
+    return imports
+
+def check(dependencies, directory, suffix):
+    imports = set()
+    own_imports = find_all_imports(directory)
+    imports.update(own_imports)
+    for package in os.listdir("bower_components"):
+        src_path = "bower_components/" + package + "/src"
+        imports.update(find_all_imports(src_path))
+    for package in os.listdir("bower_components"):
+        definitions = set()
+        src_path = "bower_components/" + package + "/src"
+        for root, directories, files in os.walk(src_path):
+            for file in filter(lambda file: file.endswith(".purs"), files):
+                path = root + "/" + file
+                with open(path) as file:
+                    definition = find_module(file)
+                    if definition is not None:
+                        definitions.add(definition)
+        if (package in dependencies
+                and not any(d in imports for d in definitions)):
+            yield "REDUNDANT", suffix, package
+        if (any(d in own_imports for d in definitions)
+                and package not in dependencies):
+            yield "NOTLISTED", suffix, package
+
+def main():
+    with open("bower.json") as file:
+        bower = json.load(file)
+    dependencies     = set(bower.get("dependencies",    {}).keys())
+    dev_dependencies = set(bower.get("devDependencies", {}).keys())
+    warnings = set()
+    warnings.update(check(dependencies,     "src",  "   "))
+    warnings.update(check(dev_dependencies, "test", "DEV"))
+    for warning in sorted(warnings):
+        print(*warning)
+    return len(warnings)
+
+if __name__ == "__main__":
+    exit(main())
